@@ -1,0 +1,14 @@
+{
+  "name": "trunks",
+  "version": "0.0.1",
+  "license": "MIT",
+  "author": "Hendy Chua",
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
