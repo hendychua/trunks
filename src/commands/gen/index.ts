@@ -8,7 +8,6 @@ import { getLanguageModel } from '../../llm';
 import * as fastGlob from 'fast-glob';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import { z } from 'zod';
-import { diffLines } from 'diff';
 
 type FileContent = {
   file: string;
@@ -120,71 +119,14 @@ export async function handleGenerateTests(options: TestGenerationInput) {
     (tc) => tc.toolName === testGenerationFunction.name,
   )?.args;
 
-  const outDirFileContents =
-    outputRelevantFileContents || inputRelevantFileContents;
-
-  generatePatchFile(outDirFileContents, results?.changes || []);
+  const outDir = options.outputDir || options.inputDir;
+  writeFiles(outDir, results?.changes || []);
 }
 
-export function generatePatchFile(
-  outDirFiles: FileContent[],
-  changes: FileContent[],
-) {
-  const outDirFilesMap = outDirFiles.reduce((acc, file) => {
-    acc.set(file.file, file);
-    return acc;
-  }, new Map<string, FileContent>());
-
-  const patchContents: string[] = [];
-
+export function writeFiles(outDir: string, changes: FileContent[]) {
   for (const change of changes) {
-    // if fileContent is undefined, it means it's a new file to be added
-    const fileContent = outDirFilesMap.get(change.file);
-    const diff = diffLines(fileContent?.content || '', change.content);
-
-    const lineStartBeforeChange = fileContent ? 1 : 0;
-    const numLinesBeforeChange =
-      fileContent?.content.split('\n').slice(0, -1).length || 0;
-    const lineStartAfterChange = 1;
-    const numLinesAfterChange = change.content.split('\n').slice(0, -1).length;
-
-    let patch: string;
-    patch = !fileContent ? 'new file mode 100644\n' : '';
-    patch += `--- ${
-      fileContent?.file ? `a/${fileContent?.file}` : '/dev/null'
-    }\n`;
-    patch += `+++ b/${change.file}\n`;
-    patch += `@@ -${lineStartBeforeChange},${numLinesBeforeChange} +${lineStartAfterChange},${numLinesAfterChange} @@\n`;
-
-    diff.forEach((part) => {
-      if (part.added) {
-        part.value
-          .split('\n')
-          .slice(0, -1)
-          .forEach((line) => {
-            patch += `+${line}\n`;
-          });
-      } else if (part.removed) {
-        part.value
-          .split('\n')
-          .slice(0, -1)
-          .forEach((line) => {
-            patch += `-${line}\n`;
-          });
-      } else {
-        part.value
-          .split('\n')
-          .slice(0, -1)
-          .forEach((line) => {
-            patch += ` ${line}\n`;
-          });
-      }
-    });
-
-    patchContents.push(patch);
+    fs.writeFileSync(path.join(outDir, change.file), change.content, 'utf8');
   }
-
-  fs.writeFileSync('trunks.patch', patchContents.join('\n'));
 }
 
 async function getDiffContent(
