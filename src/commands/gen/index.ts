@@ -1,4 +1,4 @@
-import { generateText } from 'ai';
+import { CoreTool, generateText } from 'ai';
 import { BranchContext, TestGenerationInput } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,15 +14,21 @@ const testGenerationFunction = {
   description: 'Generate test cases',
   parameters: z
     .object({
-      patch: z
-        .string()
-        .describe(
-          'The complete contents of the patch that can be applied to the codebase to get fully working code',
-        ),
+      changes: z
+        .array(
+          z.object({
+            filePath: z
+              .string()
+              .describe('The path of the file to be changed/removed/added.'),
+            content: z
+              .string()
+              .describe('The content of the file to be changed/removed/added.'),
+          }),
+        )
+        .describe('The list of changes to be made to the codebase.'),
     })
-    .describe('Generate patch contents for the changes')
     .required({
-      patch: true,
+      changes: true,
     }),
 };
 
@@ -73,12 +79,12 @@ export async function handleGenerateTests(options: TestGenerationInput) {
     changesInBranchOnly: options.branchContext ? true : false,
   });
 
-  const estimatedNumTokens = countTokens(`${system}\n${userMessage}`);
-  console.log(
-    `Estimated number of tokens using Anthropic's tokenizer: ${estimatedNumTokens}`,
-  );
+  // const estimatedNumTokens = countTokens(`${system}\n${userMessage}`);
+  // console.log(
+  //   `Estimated number of tokens using Anthropic's tokenizer: ${estimatedNumTokens}`,
+  // );
 
-  const tools = {};
+  const tools: Record<string, CoreTool> = {};
   tools[testGenerationFunction.name] = testGenerationFunction;
 
   const generateTextResult = await generateText({
@@ -95,7 +101,19 @@ export async function handleGenerateTests(options: TestGenerationInput) {
     toolChoice: 'required',
   });
 
-  console.log(JSON.stringify(generateTextResult, null, 2));
+  const results:
+    | {
+        changes: {
+          filePath: string;
+          content: string;
+        }[];
+      }
+    | undefined = generateTextResult.toolCalls.find(
+    (tc) => tc.toolName === testGenerationFunction.name,
+  )?.args;
+
+  // TODO: diff the results with the output codebase and output the diff. Take note of file paths.
+  console.log(JSON.stringify(results, null, 2));
 }
 
 async function getDiffContent(

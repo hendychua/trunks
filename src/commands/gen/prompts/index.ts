@@ -33,7 +33,8 @@ ${
     ? 'You are also provided with the diff between the current branch and base branch. Generate output for the changes in this diff only.'
     : ''
 }
-Facts and Rules:
-1. Generate the patch contents for the changes. This must be a valid patch content that can be applied to the codebase and get fully working code.
+Rules:
+1. You are allowed to create new files or modify existing files in the output codebase, or input codebase if there is no output codebase.
+2. It must be proper code.
 `;
 }
