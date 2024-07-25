@@ -126,7 +126,10 @@ export async function handleGenerateTests(options: TestGenerationInput) {
   generatePatchFile(outDirFileContents, results?.changes || []);
 }
 
-function generatePatchFile(outDirFiles: FileContent[], changes: FileContent[]) {
+export function generatePatchFile(
+  outDirFiles: FileContent[],
+  changes: FileContent[],
+) {
   const outDirFilesMap = outDirFiles.reduce((acc, file) => {
     acc.set(file.file, file);
     return acc;
@@ -140,29 +143,41 @@ function generatePatchFile(outDirFiles: FileContent[], changes: FileContent[]) {
     const diff = diffLines(fileContent?.content || '', change.content);
 
     const lineStartBeforeChange = fileContent ? 1 : 0;
-    const numLinesBeforeChange = fileContent?.content.split('\n').length || 0;
+    const numLinesBeforeChange =
+      fileContent?.content.split('\n').slice(0, -1).length || 0;
     const lineStartAfterChange = 1;
-    const numLinesAfterChange = change.content.split('\n').length;
+    const numLinesAfterChange = change.content.split('\n').slice(0, -1).length;
 
     let patch: string;
     patch = !fileContent ? 'new file mode 100644\n' : '';
-    patch += `--- ${fileContent?.file || '/dev/null'}\n`;
-    patch += `+++ ${change.file}\n`;
+    patch += `--- ${
+      fileContent?.file ? `a/${fileContent?.file}` : '/dev/null'
+    }\n`;
+    patch += `+++ b/${change.file}\n`;
     patch += `@@ -${lineStartBeforeChange},${numLinesBeforeChange} +${lineStartAfterChange},${numLinesAfterChange} @@\n`;
 
     diff.forEach((part) => {
       if (part.added) {
-        part.value.split('\n').forEach((line) => {
-          patch += `+${line}\n`;
-        });
+        part.value
+          .split('\n')
+          .slice(0, -1)
+          .forEach((line) => {
+            patch += `+${line}\n`;
+          });
       } else if (part.removed) {
-        part.value.split('\n').forEach((line) => {
-          patch += `-${line}\n`;
-        });
+        part.value
+          .split('\n')
+          .slice(0, -1)
+          .forEach((line) => {
+            patch += `-${line}\n`;
+          });
       } else {
-        part.value.split('\n').forEach((line) => {
-          patch += ` ${line}\n`;
-        });
+        part.value
+          .split('\n')
+          .slice(0, -1)
+          .forEach((line) => {
+            patch += ` ${line}\n`;
+          });
       }
     });
 
