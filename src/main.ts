@@ -1,57 +1,11 @@
 import { Command } from 'commander';
-
-enum TestType {
-  postman = 'postman',
-  unit = 'unit',
-}
-
-type BranchContext = {
-  baseBranch: string;
-  workingBranch: string;
-};
-
-function validateTestType(value: string): TestType {
-  if (!Object.values(TestType).includes(value as TestType)) {
-    console.error(
-      `Invalid test type. Valid options: ${Object.values(TestType).join(
-        ', ',
-      )}.`,
-    );
-    process.exit(1);
-  }
-  return value as TestType;
-}
-
-function validateBranchContext(
-  value: string | undefined,
-): BranchContext | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const [baseBranch, workingBranch] = value.split('..');
-  if (!baseBranch || !workingBranch) {
-    console.error(
-      'Invalid branch context. Please provide a context in the format <baseBranch>..<workingBranch>',
-    );
-    process.exit(1);
-  }
-  return {
-    baseBranch,
-    workingBranch,
-  };
-}
-
-type TestGenerationInput = {
-  inputDir: string;
-  outputDir?: string;
-  type: TestType;
-  branchContext?: BranchContext;
-};
-
-function handleGenerateTests(options: TestGenerationInput) {
-  console.log(options);
-}
+import { handleGenerateTests } from './commands/gen';
+import {
+  validateTestType,
+  validateBranchContext,
+} from './commands/gen/helpers';
+import { TestType } from './commands/gen/types';
+import { LLMProvider, validateLLMProvider } from './llm';
 
 const program = new Command();
 
@@ -83,6 +37,13 @@ program
     '(Optional) The working branch context to send to the LLM',
     validateBranchContext,
   )
-  .action((options) => handleGenerateTests(options));
+  .requiredOption(
+    '-l, --llm-provider <llmProvider>',
+    `The LLM provider to use. Valid options: ${Object.values(LLMProvider).join(
+      ', ',
+    )}.`,
+    validateLLMProvider,
+  )
+  .action(async (options) => await handleGenerateTests(options));
 
 program.parse();

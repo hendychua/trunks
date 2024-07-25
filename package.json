@@ -4,7 +4,14 @@
   "license": "MIT",
   "author": "Hendy Chua",
   "dependencies": {
-    "commander": "^12.1.0"
+    "@ai-sdk/anthropic": "^0.0.32",
+    "@ai-sdk/openai": "^0.0.39",
+    "@anthropic-ai/tokenizer": "^0.0.4",
+    "ai": "^3.2.35",
+    "commander": "^12.1.0",
+    "fast-glob": "^3.3.2",
+    "simple-git": "^3.25.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.14.11",
