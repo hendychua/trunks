@@ -8,6 +8,12 @@ import { getLanguageModel } from '../../llm';
 import * as fastGlob from 'fast-glob';
 import { countTokens } from '@anthropic-ai/tokenizer';
 import { z } from 'zod';
+import { diffLines } from 'diff';
+
+type FileContent = {
+  file: string;
+  content: string;
+};
 
 const testGenerationFunction = {
   name: 'testGenerationFunction',
@@ -17,7 +23,7 @@ const testGenerationFunction = {
       changes: z
         .array(
           z.object({
-            filePath: z
+            file: z
               .string()
               .describe('The path of the file to be changed/removed/added.'),
             content: z
@@ -43,23 +49,25 @@ export async function handleGenerateTests(options: TestGenerationInput) {
     'yarn.lock',
   ]);
 
-  const inputRelevantFiles = await getContextRelevantFiles(
-    options.inputDir,
-    ignoreFiles,
-  );
-  const inputContent = inputRelevantFiles
-    .map((file) => readFileContents(options.inputDir, file))
-    .join('\n');
-
   const differentOutputDir = !!(
     options.outputDir && options.outputDir !== options.inputDir
   );
-  const outputRelevantFiles = differentOutputDir
-    ? await getContextRelevantFiles(options.outputDir!, ignoreFiles)
-    : undefined;
-  const outputContent = outputRelevantFiles
-    ?.map((file) => readFileContents(options.outputDir!, file))
+
+  const inputRelevantFileContents = (
+    await getContextRelevantFiles(options.inputDir, ignoreFiles)
+  ).map((file) => readFileContents(options.inputDir, file));
+  const inputContent = inputRelevantFileContents
+    .map(fileContentToPromptFormat)
     .join('\n');
+
+  const outputRelevantFileContents = (
+    differentOutputDir
+      ? await getContextRelevantFiles(options.outputDir!, ignoreFiles)
+      : undefined
+  )?.map((file) => readFileContents(options.outputDir!, file));
+  const outputContent = outputRelevantFileContents
+    ?.map(fileContentToPromptFormat)
+    ?.join('\n');
 
   const diffContent = options.branchContext
     ? await getDiffContent(options.inputDir, options.branchContext)
@@ -104,7 +112,7 @@ export async function handleGenerateTests(options: TestGenerationInput) {
   const results:
     | {
         changes: {
-          filePath: string;
+          file: string;
           content: string;
         }[];
       }
@@ -112,8 +120,56 @@ export async function handleGenerateTests(options: TestGenerationInput) {
     (tc) => tc.toolName === testGenerationFunction.name,
   )?.args;
 
-  // TODO: diff the results with the output codebase and output the diff. Take note of file paths.
-  console.log(JSON.stringify(results, null, 2));
+  const outDirFileContents =
+    outputRelevantFileContents || inputRelevantFileContents;
+
+  generatePatchFile(outDirFileContents, results?.changes || []);
+}
+
+function generatePatchFile(outDirFiles: FileContent[], changes: FileContent[]) {
+  const outDirFilesMap = outDirFiles.reduce((acc, file) => {
+    acc.set(file.file, file);
+    return acc;
+  }, new Map<string, FileContent>());
+
+  const patchContents: string[] = [];
+
+  for (const change of changes) {
+    // if fileContent is undefined, it means it's a new file to be added
+    const fileContent = outDirFilesMap.get(change.file);
+    const diff = diffLines(fileContent?.content || '', change.content);
+
+    const lineStartBeforeChange = fileContent ? 1 : 0;
+    const numLinesBeforeChange = fileContent?.content.split('\n').length || 0;
+    const lineStartAfterChange = 1;
+    const numLinesAfterChange = change.content.split('\n').length;
+
+    let patch: string;
+    patch = !fileContent ? 'new file mode 100644\n' : '';
+    patch += `--- ${fileContent?.file || '/dev/null'}\n`;
+    patch += `+++ ${change.file}\n`;
+    patch += `@@ -${lineStartBeforeChange},${numLinesBeforeChange} +${lineStartAfterChange},${numLinesAfterChange} @@\n`;
+
+    diff.forEach((part) => {
+      if (part.added) {
+        part.value.split('\n').forEach((line) => {
+          patch += `+${line}\n`;
+        });
+      } else if (part.removed) {
+        part.value.split('\n').forEach((line) => {
+          patch += `-${line}\n`;
+        });
+      } else {
+        part.value.split('\n').forEach((line) => {
+          patch += ` ${line}\n`;
+        });
+      }
+    });
+
+    patchContents.push(patch);
+  }
+
+  fs.writeFileSync('trunks.patch', patchContents.join('\n'));
 }
 
 async function getDiffContent(
@@ -139,12 +195,22 @@ function getContextRelevantFiles(
   return listRelevantFiles(git, dir, ignoreFiles);
 }
 
-function readFileContents(projectDir: string, fullFilePath: string): string {
+function readFileContents(
+  projectDir: string,
+  fullFilePath: string,
+): FileContent {
   const content = fs.readFileSync(fullFilePath, 'utf8');
   const relativePath = path.relative(projectDir, fullFilePath);
+  return {
+    file: relativePath,
+    content,
+  };
+}
+
+function fileContentToPromptFormat(fileContent: FileContent): string {
   return `<file>
-  <relativePath>${relativePath}</relativePath>
-  <content>${content}</content>
+  <relativePath>${fileContent.file}</relativePath>
+  <content>${fileContent.content}</content>
 </file>`;
 }
 
